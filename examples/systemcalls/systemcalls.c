@@ -1,4 +1,12 @@
 #include "systemcalls.h"
+#include "stdlib.h"
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <linux/fs.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,7 +24,11 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
+    int ret = system(cmd);
+    if (ret == -1) {
+        perror("system");
+        return false;
+    }
     return true;
 }
 
@@ -45,10 +57,6 @@ bool do_exec(int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -58,6 +66,24 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    int status;
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        exit(1);
+    } else if (pid == 0) {
+        execv(command[0], &command[0]);
+        exit(1);
+    }
+
+    pid = wait(&status);
+    if (WIFEXITED(status)) {
+        if (WEXITSTATUS(status) == 1) {
+            return false;
+        } else if (WEXITSTATUS(status) == 0) {
+            return true;
+        }
+    }
 
     va_end(args);
 
@@ -80,10 +106,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         command[i] = va_arg(args, char *);
     }
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
-
 
 /*
  * TODO
@@ -93,7 +115,29 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *
 */
 
+    pid_t pid;
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) { perror("open"); return false; }
+    switch (pid = fork()) {
+        case -1: perror("fork"); return false;
+        case 0:
+            if (dup2(fd, 1) < 0) { perror("dup2"); return false;}
+            close(fd);
+            execv(command[0], command); 
+            perror("execv"); 
+            return false;
+        default:
+            close(fd);
+    }
+    
+    int status;
+    if (waitpid(pid, &status, 0) == -1) {
+        return false;
+    } else if (WIFEXITED(status)) {
+        return WEXITSTATUS(status) == 0;
+    }
+
     va_end(args);
 
-    return true;
+    return false;
 }
