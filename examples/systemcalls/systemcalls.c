@@ -117,27 +117,31 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
     pid_t pid;
     int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
-    if (fd < 0) { perror("open"); return false; }
+    if (fd < 0) { perror("open"); exit(1); }
     switch (pid = fork()) {
-        case -1: perror("fork"); return false;
+        case -1: 
+            perror("fork");
+            exit(1);
         case 0:
-            if (dup2(fd, 1) < 0) { perror("dup2"); return false;}
+            if (dup2(fd, 1) < 0) { perror("dup2"); exit(1);}
             close(fd);
             execv(command[0], command); 
             perror("execv"); 
-            return false;
+            exit(1);
         default:
             close(fd);
     }
     
     int status;
-    if (waitpid(pid, &status, 0) == -1) {
-        return false;
-    } else if (WIFEXITED(status)) {
-        return WEXITSTATUS(status) == 0;
+    pid = wait(&status);
+    if (WIFEXITED(status)) {
+        if (WEXITSTATUS(status) == 1) {
+            return false;
+        } else if (WEXITSTATUS(status) == 0) {
+            return true;
+        }
     }
-
     va_end(args);
 
-    return false;
+    return true;
 }
