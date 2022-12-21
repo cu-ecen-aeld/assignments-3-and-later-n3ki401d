@@ -34,7 +34,18 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     echo "Checking out version ${KERNEL_VERSION}"
     git checkout ${KERNEL_VERSION}
 
+    HOSTCC=gcc-9
     # TODO: Add your kernel build steps here
+    # clean
+    make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
+    # make default config
+    make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
+    # build vmlinux
+    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
+    # build modules
+    make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
+    # build devicetree
+    make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} dtbs
 fi
 
 echo "Adding the Image in outdir"
@@ -48,6 +59,12 @@ then
 fi
 
 # TODO: Create necessary base directories
+mkdir ${OUTDIR}/rootfs
+cd ${OUTDIR}/rootfs
+mkdir bin dev etc home lib proc sbin sys tmp usr var
+mkdir usr/bin usr/lib usr/sbin
+mkdir -p var/log
+sudo chown -R root:root *
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
@@ -56,11 +73,16 @@ git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox
+    make distclean
+    make defconfig
 else
     cd busybox
 fi
 
 # TODO: Make and install busybox
+echo "STARTING BUSYBOX INSTALLATION"
+sudo make -j 4 ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- install
+echo "BUSYBOX INSTALLATION COMPLETED"
 
 echo "Library dependencies"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
